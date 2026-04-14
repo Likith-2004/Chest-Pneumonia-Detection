@@ -5,4 +5,5 @@ seaborn
 scikit-learn
 pillow
 opencv-python
-tk
+flask==3.0.0
+werkzeug==3.0.0

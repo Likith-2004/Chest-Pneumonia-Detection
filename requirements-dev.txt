@@ -1,0 +1,26 @@
+# Development Dependencies
+# Install with: pip install -r requirements-dev.txt
+
+# Production dependencies
+-r requirements.txt
+
+# Development & Testing
+pytest==7.4.0
+pytest-cov==4.1.0
+black==23.7.0
+flake8==6.0.0
+pylint==2.17.4
+
+# Server & Deployment
+gunicorn==21.2.0
+python-dotenv==1.0.0
+
+# CORS (if needed)
+flask-cors==4.0.0
+
+# Additional utilities
+python-dateutil==2.8.2
+requests==2.31.0
+
+# Monitoring & Logging
+python-logging-loki==0.3.2

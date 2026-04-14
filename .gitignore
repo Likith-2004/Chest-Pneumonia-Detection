@@ -1,1 +1,107 @@
-chest\
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Flask
+instance/
+.webassets-cache
+*.db
+*.sqlite
+*.sqlite3
+
+# Model & Data
+*.pth
+*.pkl
+*.h5
+*.model
+*.weights
+*.bin
+
+# Uploads (temporary files)
+uploads/
+temp/
+tmp/
+
+# Logs
+logs/
+*.log
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+.env
+.env.local
+
+# Test Coverage
+.coverage
+htmlcov/
+
+# Node (if using frontend build tools)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Backup files
+*.bak
+*.backup
+*.tmp
+
+# Document Files (EXCLUDE PDF & DOCX)
+*.pdf
+*.docx
+*.doc
+*.xlsx
+*.xls
+*.pptx
+*.ppt
+
+# Large files
+*.zip
+*.gz
+*.rar
+*.7z
+
+# Virtual environments folder
+chest/
+
+# IDE Settings
+.vscode/
+.pylintrc
+.flake8
