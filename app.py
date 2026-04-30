@@ -15,21 +15,17 @@ import urllib.error
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
-# Create uploads folder if it doesn't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Device setup
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Model configuration
 MODEL_PATH = "pneumonia_unknown_model.pth"
 MODEL_URL = "https://github.com/Likith-2004/Chest-X-Ray-Pneumonia-Detection/releases/download/v1.0.0/pneumonia_unknown_model.pth"
 CLASSES = ["Normal", "Pneumonia", "Unknown"]
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'}
 
-# Download model from GitHub if not exists
 def download_model():
     """Download model from GitHub Releases if not present locally"""
     if os.path.exists(MODEL_PATH):
@@ -48,18 +44,17 @@ def download_model():
         print(f"❌ Error downloading model: {e}")
         return False
 
-# Load model
 def load_model():
     model = models.resnet18(weights=None)
     model.fc = torch.nn.Linear(model.fc.in_features, len(CLASSES))
     
     try:
-        # Try to download model if not exists
         if not os.path.exists(MODEL_PATH):
+            print(f"Model not found locally. Attempting download...")
             if not download_model():
                 raise Exception("Could not download model from GitHub Releases")
         
-        # Load model weights
+        print(f"Loading model from {MODEL_PATH}...")
         state_dict = torch.load(MODEL_PATH, map_location=device)
         model.load_state_dict(state_dict)
         model = model.to(device)
@@ -69,11 +64,16 @@ def load_model():
     except FileNotFoundError:
         raise Exception(f"Model file not found at {MODEL_PATH} and download failed")
     except Exception as e:
+        print(f"❌ CRITICAL ERROR loading model: {e}")
         raise Exception(f"Error loading model: {e}")
 
-model = load_model()
+try:
+    model = load_model()
+except Exception as e:
+    print(f"❌ FATAL ERROR: Failed to load model on startup: {e}")
+    print(f"❌ App is starting but predictions will fail")
+    model = None
 
-# Grad-CAM implementation
 class GradCAM:
     def __init__(self, model, target_layer):
         self.model = model
@@ -107,9 +107,15 @@ class GradCAM:
 
         return cam.cpu().numpy(), target_class
 
-gradcam = GradCAM(model, model.layer4[1].conv2)
+gradcam = None
+if model is not None:
+    try:
+        gradcam = GradCAM(model, model.layer4[1].conv2)
+        print("✅ Grad-CAM initialized successfully")
+    except Exception as e:
+        print(f"❌ Error initializing Grad-CAM: {e}")
+        gradcam = None
 
-# Image preprocessing
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -117,7 +123,6 @@ transform = transforms.Compose([
                          [0.229, 0.224, 0.225])
 ])
 
-# Utility functions
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -128,57 +133,56 @@ def image_to_base64(image_path):
 
 def predict_and_visualize(image_path):
     """Make prediction and generate Grad-CAM visualization"""
-    # Load and process image
-    img = Image.open(image_path).convert('RGB')
-    img_tensor = transform(img).unsqueeze(0).to(device)
+    if model is None:
+        raise Exception("Model not loaded. Please check Render logs for model loading errors.")
     
-    # Make prediction
-    with torch.no_grad():
-        output = model(img_tensor)
-        probabilities = torch.nn.functional.softmax(output, dim=1)
-        confidence, predicted = torch.max(probabilities, 1)
-        predicted_class = predicted.item()
-        confidence_score = confidence.item()
-    
-    # Generate Grad-CAM
-    cam, _ = gradcam.generate(img_tensor, predicted_class)
-    
-    # Resize CAM to original image size
-    cam_resized = cv2.resize(cam, (224, 224))
-    
-    # Create heatmap
-    heatmap = cv2.applyColorMap((cam_resized * 255).astype(np.uint8), cv2.COLORMAP_JET)
-    
-    # Convert to RGB
-    heatmap_rgb = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
-    
-    # Overlay on original image
-    img_array = np.array(img.resize((224, 224)))
-    overlay = cv2.addWeighted(img_array, 0.6, heatmap_rgb, 0.4, 0)
-    
-    # Convert overlay to PIL Image
-    overlay_img = Image.fromarray(overlay)
-    
-    # Convert to base64
-    buffered = BytesIO()
-    overlay_img.save(buffered, format="PNG")
-    overlay_base64 = base64.b64encode(buffered.getvalue()).decode()
-    
-    # Get confidence scores for all classes
-    class_scores = {
-        CLASSES[i]: float(probabilities[0][i].item()) * 100
-        for i in range(len(CLASSES))
-    }
-    
-    return {
-        'prediction': CLASSES[predicted_class],
-        'confidence': confidence_score * 100,
-        'class_scores': class_scores,
-        'gradcam': overlay_base64,
-        'device': str(device)
-    }
+    try:
+        img = Image.open(image_path).convert('RGB')
+        img_tensor = transform(img).unsqueeze(0).to(device)
+        
+        with torch.no_grad():
+            output = model(img_tensor)
+            probabilities = torch.nn.functional.softmax(output, dim=1)
+            confidence, predicted = torch.max(probabilities, 1)
+            predicted_class = predicted.item()
+            confidence_score = confidence.item()
+        
+        if gradcam is None:
+            raise Exception("Grad-CAM not initialized")
+        
+        cam, _ = gradcam.generate(img_tensor, predicted_class)
+        
+        cam_resized = cv2.resize(cam, (224, 224))
+        
+        heatmap = cv2.applyColorMap((cam_resized * 255).astype(np.uint8), cv2.COLORMAP_JET)
+        
+        heatmap_rgb = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+        
+        img_array = np.array(img.resize((224, 224)))
+        overlay = cv2.addWeighted(img_array, 0.6, heatmap_rgb, 0.4, 0)
+        
+        overlay_img = Image.fromarray(overlay)
+        
+        buffered = BytesIO()
+        overlay_img.save(buffered, format="PNG")
+        overlay_base64 = base64.b64encode(buffered.getvalue()).decode()
+        
+        class_scores = {
+            CLASSES[i]: float(probabilities[0][i].item()) * 100
+            for i in range(len(CLASSES))
+        }
+        
+        return {
+            'prediction': CLASSES[predicted_class],
+            'confidence': confidence_score * 100,
+            'class_scores': class_scores,
+            'gradcam': overlay_base64,
+            'device': str(device)
+        }
+    except Exception as e:
+        print(f"❌ Error in predict_and_visualize: {e}")
+        raise
 
-# Routes
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -186,7 +190,6 @@ def index():
 @app.route('/api/predict', methods=['POST'])
 def predict():
     try:
-        # Check if file is in request
         if 'file' not in request.files:
             return jsonify({'error': 'No file provided'}), 400
         
@@ -198,22 +201,27 @@ def predict():
         if not allowed_file(file.filename):
             return jsonify({'error': 'Invalid file type. Allowed: ' + ', '.join(ALLOWED_EXTENSIONS)}), 400
         
-        # Save file
         filename = secure_filename(file.filename)
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
         
-        # Make prediction
         result = predict_and_visualize(filepath)
         
-        # Get original image as base64
         original_base64 = image_to_base64(filepath)
         result['original_image'] = original_base64
         
-        return jsonify(result)
+        try:
+            os.remove(filepath)
+        except:
+            pass
+        
+        return jsonify(result), 200
     
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"❌ Error in /api/predict: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e), 'status': 'error'}), 500
 
 @app.route('/api/info', methods=['GET'])
 def info():
@@ -221,8 +229,21 @@ def info():
         'model': 'ResNet18',
         'classes': CLASSES,
         'device': str(device),
-        'visualization': 'Grad-CAM'
+        'visualization': 'Grad-CAM',
+        'model_loaded': model is not None,
+        'gradcam_ready': gradcam is not None
     })
 
+@app.errorhandler(500)
+def internal_error(error):
+    print(f"❌ 500 Error: {error}")
+    return jsonify({'error': 'Internal server error', 'details': str(error)}), 500
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print("\n" + "="*50)
+    print("🚀 Flask app starting...")
+    print(f"✅ Device: {device}")
+    print(f"✅ Model loaded: {model is not None}")
+    print(f"✅ Grad-CAM ready: {gradcam is not None}")
+    print("="*50 + "\n")
+    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
