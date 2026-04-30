@@ -866,7 +866,6 @@
             <p>&copy; 2026 ThoraxAI - Advanced Pneumonia Detection with AI</p>
         </div>
     </footer>
-
     <script>
         // DOM Elements
         const uploadArea = document.getElementById('uploadArea');
@@ -937,13 +936,24 @@
                 method: 'POST',
                 body: formData
             })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(data => {
-                        throw new Error(data.error || 'Prediction failed');
-                    });
+            .then(async response => {
+                // Safely parse JSON – an empty body (e.g. Render OOM kill) would
+                // previously throw "Unexpected end of JSON input" here.
+                let data;
+                try {
+                    data = await response.json();
+                } catch (_) {
+                    // Body was empty or not valid JSON
+                    throw new Error(
+                        response.status === 502 || response.status === 503
+                            ? 'The server is still loading the AI model. Please wait 30 seconds and try again.'
+                            : `Server error (${response.status}). Please try again.`
+                    );
                 }
-                return response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || `Request failed with status ${response.status}`);
+                }
+                return data;
             })
             .then(data => {
                 displayResults(data);
