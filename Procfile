@@ -1,1 +1,1 @@
-web: gunicorn -w 4 -b 0.0.0.0:$PORT app:app
+web: gunicorn -w 1 --timeout 300 --graceful-timeout 30 -b 0.0.0.0:$PORT app:app
