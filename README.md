@@ -1,4 +1,4 @@
-# 🫁 Chest X-Ray Pneumonia Detection
+# Chest X-Ray Pneumonia Detection
 
 A stunning, modern web application for detecting pneumonia in chest X-ray images using deep learning (ResNet18) with interpretable AI visualization (Grad-CAM).
 
